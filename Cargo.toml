@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "programs/predict-chat-program",
+]
+resolver = "2"
