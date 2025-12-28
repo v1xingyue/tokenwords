@@ -84,14 +84,7 @@ pub fn process_instruction(
             staking_mint,
             stake_vault,
             bump,
-        } => process_initialize_room(
-            program_id,
-            accounts,
-            oracle_feed,
-            staking_mint,
-            stake_vault,
-            bump,
-        ),
+        } => process_initialize_room(program_id, accounts, oracle_feed, staking_mint, stake_vault, bump),
         PredictInstruction::StakeAndCommit {
             predicted_price,
             expiry_slot,
@@ -174,9 +167,7 @@ fn process_stake_and_commit(
     prediction_state.serialize(&mut &mut prediction_account.data.borrow_mut()[..])?;
     msg!(
         "User {} committed prediction {} with stake {}",
-        user.key,
-        predicted_price,
-        stake
+        user.key, predicted_price, stake
     );
 
     Ok(())
@@ -226,9 +217,7 @@ fn process_settle_prediction(program_id: &Pubkey, accounts: &[AccountInfo]) -> P
     prediction_state.serialize(&mut &mut prediction_account.data.borrow_mut()[..])?;
     msg!(
         "Prediction settled. Observed price {}, target {}, won: {}",
-        observed_price,
-        prediction_state.predicted_price,
-        prediction_state.won
+        observed_price, prediction_state.predicted_price, prediction_state.won
     );
 
     Ok(())
