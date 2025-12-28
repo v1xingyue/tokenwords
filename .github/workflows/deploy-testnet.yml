@@ -55,12 +55,21 @@ jobs:
       - name: Write deploy keypair
         if: steps.secret_guard.outputs.secrets_present == 'true'
         run: |
-          if [ -z "$SOLANA_DEPLOY_KEYPAIR" ]; then
-            echo "SOLANA_DEPLOY_KEYPAIR secret is not set" >&2
-            exit 1
+          KEYPAIR_PATH=deploy-keypair.json
+          if [ -n "$SOLANA_DEPLOY_KEYPAIR" ]; then
+            echo "$SOLANA_DEPLOY_KEYPAIR" | base64 --decode > "$KEYPAIR_PATH"
+            echo "Using provided deploy keypair secret." >> "$GITHUB_STEP_SUMMARY"
+          else
+            if [ ! -f "$KEYPAIR_PATH" ]; then
+              echo "Repository deploy keypair missing at $KEYPAIR_PATH" >&2
+              exit 1
+            fi
+            echo "No deploy keypair secret set; using repository keypair at $KEYPAIR_PATH." >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "$SOLANA_DEPLOY_KEYPAIR" | base64 --decode > deploy-keypair.json
-          chmod 600 deploy-keypair.json
+          chmod 600 "$KEYPAIR_PATH"
+          DEPLOY_PUBKEY=$(solana-keygen pubkey "$KEYPAIR_PATH")
+          echo "DEPLOY_PUBKEY=$DEPLOY_PUBKEY" >> "$GITHUB_ENV"
+          echo "Deploy keypair pubkey: $DEPLOY_PUBKEY" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve RPC endpoint
         if: steps.secret_guard.outputs.secrets_present == 'true'
@@ -69,6 +78,37 @@ jobs:
           echo "RPC_URL=$RPC_URL" >> $GITHUB_ENV
           solana config set --url "$RPC_URL"
           solana config set --keypair ./deploy-keypair.json
+
+      - name: Fund deployer with test SOL
+        run: |
+          MIN_BALANCE=1
+          get_balance() {
+            solana balance "$DEPLOY_PUBKEY" --url "$RPC_URL" --commitment confirmed 2>/dev/null | awk '{print $1}'
+          }
+
+          CURRENT_BALANCE=$(get_balance)
+          if [ -n "$CURRENT_BALANCE" ] && awk "BEGIN {exit !($CURRENT_BALANCE >= MIN_BALANCE)}"; then
+            echo "Deployer already funded with ${CURRENT_BALANCE} SOL." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          ATTEMPTS=0
+          while [ $ATTEMPTS -lt 3 ]; do
+            if solana airdrop 2 "$DEPLOY_PUBKEY" --url "$RPC_URL" --commitment confirmed; then
+              CURRENT_BALANCE=$(get_balance)
+              if [ -n "$CURRENT_BALANCE" ] && awk "BEGIN {exit !($CURRENT_BALANCE >= MIN_BALANCE)}"; then
+                echo "Funded deployer to ${CURRENT_BALANCE} SOL." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+            fi
+
+            ATTEMPTS=$((ATTEMPTS+1))
+            echo "Airdrop attempt $ATTEMPTS failed or balance still low; retrying in 5s..."
+            sleep 5
+          done
+
+          echo "Insufficient SOL for deployment. Fund $DEPLOY_PUBKEY and rerun the workflow." | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Build program shared object
         if: steps.secret_guard.outputs.secrets_present == 'true'
