@@ -17,4 +17,3 @@ no-log-ix-name = []
 solana-program = "1.18.18"
 thiserror = "1.0"
 borsh = { version = "1.5", features = ["derive"] }
-bytemuck = { version = "1.16", features = ["derive"] }

@@ -39,9 +39,19 @@ Use the helper script to build a shared object for deployment:
 
 ## CI deployment to Solana testnet
 
-The repository ships with `.github/workflows/deploy-testnet.yml` to build the BPF shared object and deploy it to testnet on pushes to `main` or via the **Run workflow** button. Configure the following secrets in your GitHub repository before running it:
+The repository ships with `.github/workflows/deploy-testnet.yml` to build the BPF shared object and deploy it to testnet on pushes to `main` or via the **Run workflow** button.
 
-- `SOLANA_DEPLOY_KEYPAIR` — Base64-encoded contents of the JSON keypair that will pay fees and own/upgrade the program. You can create it with `base64 < ~/.config/solana/id.json | tr -d '\n'` and paste the result.
-- `SOLANA_RPC_URL` (optional) — Custom RPC endpoint; defaults to `https://api.testnet.solana.com` when not set.
+### Configure the deploy account
 
-When dispatching the workflow manually you may optionally supply a `program_id` input to upgrade an existing deployment. Otherwise `solana program deploy` will generate or reuse the program ID based on the provided keypair.
+1. Create or pick a keypair on the machine that will own and pay for the deployment. The CLI default lives at `~/.config/solana/id.json`. Keep this file private.
+2. Base64-encode the JSON so GitHub Actions can write it back out during the workflow:
+
+   ```bash
+   base64 < ~/.config/solana/id.json | tr -d '\n'
+   ```
+
+3. In your repository settings, add the value above to a secret named `SOLANA_DEPLOY_KEYPAIR`.
+4. (Optional) Add `SOLANA_RPC_URL` to point at a custom testnet RPC provider. If omitted, the workflow defaults to `https://api.testnet.solana.com`.
+5. When dispatching the workflow manually you may supply a `program_id` input to upgrade an existing program; leaving it empty performs a fresh deploy and derives the program ID from the deploy keypair.
+
+The workflow installs the Solana CLI, builds the program shared object using the helper script, and runs `solana program deploy` with the provided configuration.
