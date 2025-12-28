@@ -17,18 +17,43 @@ jobs:
       SOLANA_DEPLOY_KEYPAIR: ${{ secrets.SOLANA_DEPLOY_KEYPAIR }}
       SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
     steps:
+      - name: Check required secrets
+        id: secret_guard
+        run: |
+          missing=""
+          for var in SOLANA_DEPLOY_KEYPAIR SOLANA_RPC_URL; do
+            if [ -z "${!var}" ]; then
+              missing+="$var "
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "secrets_present=false" >> "$GITHUB_OUTPUT"
+            echo "Missing secrets: $missing" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "secrets_present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Abort when secrets are absent
+        if: steps.secret_guard.outputs.secrets_present != 'true'
+        run: echo "Skipping deployment because required secrets are not configured."
+
       - name: Checkout repository
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         uses: actions/checkout@v4
 
       - name: Install Solana CLI
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         run: |
           sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_VERSION}/install)" -s -- v${SOLANA_VERSION}
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
 
       - name: Verify Solana install
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         run: solana --version
 
-      - name: Prepare deploy keypair
+      - name: Write deploy keypair
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         run: |
           KEYPAIR_PATH=deploy-keypair.json
           if [ -n "$SOLANA_DEPLOY_KEYPAIR" ]; then
@@ -46,7 +71,8 @@ jobs:
           echo "DEPLOY_PUBKEY=$DEPLOY_PUBKEY" >> "$GITHUB_ENV"
           echo "Deploy keypair pubkey: $DEPLOY_PUBKEY" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Resolve RPC endpoint and CLI config
+      - name: Resolve RPC endpoint
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         run: |
           RPC_URL="${SOLANA_RPC_URL:-https://api.testnet.solana.com}"
           echo "RPC_URL=$RPC_URL" >> $GITHUB_ENV
@@ -85,9 +111,11 @@ jobs:
           exit 1
 
       - name: Build program shared object
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         run: ./scripts/build-so.sh
 
       - name: Locate compiled program artifact
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         run: |
           PROGRAM_SO=$(find target -name predict_chat_program.so | head -n 1)
           if [ -z "$PROGRAM_SO" ]; then
@@ -97,6 +125,7 @@ jobs:
           echo "PROGRAM_SO=$PROGRAM_SO" >> $GITHUB_ENV
 
       - name: Deploy to testnet
+        if: steps.secret_guard.outputs.secrets_present == 'true'
         env:
           PROGRAM_ID_INPUT: ${{ github.event.inputs.program_id }}
         run: |
