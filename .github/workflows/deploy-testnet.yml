@@ -1,0 +1,69 @@
+name: Deploy program to Solana testnet
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      program_id:
+        description: "Optional existing program ID to upgrade"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SOLANA_VERSION: "1.18.24"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_VERSION}/install)" -s -- v${SOLANA_VERSION}
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Verify Solana install
+        run: solana --version
+
+      - name: Write deploy keypair
+        env:
+          SOLANA_DEPLOY_KEYPAIR: ${{ secrets.SOLANA_DEPLOY_KEYPAIR }}
+        run: |
+          if [ -z "$SOLANA_DEPLOY_KEYPAIR" ]; then
+            echo "SOLANA_DEPLOY_KEYPAIR secret is not set" >&2
+            exit 1
+          fi
+          echo "$SOLANA_DEPLOY_KEYPAIR" | base64 --decode > deploy-keypair.json
+          chmod 600 deploy-keypair.json
+
+      - name: Resolve RPC endpoint
+        env:
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+        run: |
+          RPC_URL="${SOLANA_RPC_URL:-https://api.testnet.solana.com}"
+          echo "RPC_URL=$RPC_URL" >> $GITHUB_ENV
+          solana config set --url "$RPC_URL"
+          solana config set --keypair ./deploy-keypair.json
+
+      - name: Build program shared object
+        run: ./scripts/build-so.sh
+
+      - name: Locate compiled program artifact
+        run: |
+          PROGRAM_SO=$(find target -name predict_chat_program.so | head -n 1)
+          if [ -z "$PROGRAM_SO" ]; then
+            echo "predict_chat_program.so not found" >&2
+            exit 1
+          fi
+          echo "PROGRAM_SO=$PROGRAM_SO" >> $GITHUB_ENV
+
+      - name: Deploy to testnet
+        env:
+          PROGRAM_ID_INPUT: ${{ github.event.inputs.program_id }}
+        run: |
+          EXTRA_ARGS=""
+          if [ -n "$PROGRAM_ID_INPUT" ]; then
+            EXTRA_ARGS="--program-id $PROGRAM_ID_INPUT"
+          fi
+          solana program deploy $EXTRA_ARGS "$PROGRAM_SO"
