@@ -45,8 +45,9 @@ jobs:
       - name: Install Solana CLI
         if: steps.secret_guard.outputs.secrets_present == 'true'
         run: |
-          sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_VERSION}/install)" -s -- v${SOLANA_VERSION}
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          curl -sSfL "https://release.solana.com/v${SOLANA_VERSION}/install" -o /tmp/solana-install.sh
+          bash /tmp/solana-install.sh
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
 
       - name: Verify Solana install
         if: steps.secret_guard.outputs.secrets_present == 'true'
