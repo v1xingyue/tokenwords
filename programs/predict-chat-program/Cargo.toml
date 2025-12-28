@@ -1,0 +1,20 @@
+[package]
+name = "predict-chat-program"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "predict_chat_program"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+
+[dependencies]
+solana-program = "1.18.18"
+thiserror = "1.0"
+borsh = { version = "1.5", features = ["derive"] }
+bytemuck = { version = "1.16", features = ["derive"] }
